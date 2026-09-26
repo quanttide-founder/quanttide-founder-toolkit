@@ -1,0 +1,14 @@
+name: quanttide_founder
+description: 量潮创始人工具箱（quanttide-founder-toolkit）的 Dart 包，面向创始人角色的事务与工具集合。
+version: 1.0.0
+repository: https://github.com/quanttide-founder/quanttide-founder-toolkit
+
+environment:
+  sdk: ^3.12.2
+
+# Add regular dependencies here.
+dependencies:
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
