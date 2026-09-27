@@ -37,4 +37,18 @@
 
 ## 各语言包
 
-- [Dart 包](../packages/dart/doc/index.md)：`quanttide_founder`，memory 解析引擎 + 语义提取层的 Dart 实现
+- [Dart 包](../packages/dart/doc/index.md)：`quanttide_founder`，memory 解析引擎 + fiction 解析引擎 + 语义提取层的 Dart 实现
+
+## memory 与 fiction 的共同结构
+
+memory 和 fiction 是同构的——同一类东西：**用目录命名约定组织的异构 Markdown 文档集合**。这是三层管线能通用的根本原因。
+
+| 共同特点 | memory | fiction |
+|---|---|---|
+| 结构靠目录命名约定 | `journal/ profile/ insight/ roadmap/` | `{N}_{阶段}/` 前缀 |
+| 文件命名承载元数据 | `YYYY-MM-DD.md` 文件名即日期 | `{序号}_{标题}.md` 文件名即编号 |
+| 原始→精炼的分层 | journal（原始）→ insight（提炼） | 观察站（原始）→ 灵感→场景→初稿→定稿 |
+| 发现逻辑：找特征目录 | 含 `journal/profile/insight/roadmap` 任一子目录 | 含 `index.md` 或 `N_` 阶段子目录 |
+| 容忍结构缺失 | 无假说节、无元目标、无一级标题均可解析 | 未编号章节、预留空号、无 index.md 均可处理 |
+
+第一层（Markdown 语法）天然通用，第二层（标题切分）天然通用，第三层（语义）靠规则文件适配——规则文件描述的正是那些「命名约定」的含义。
