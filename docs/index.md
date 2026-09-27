@@ -77,3 +77,4 @@ memory 和 fiction 用的是同一套组织方式：
 ## 各语言包
 
 - [Dart 包](../packages/dart/doc/index.md)：`quanttide_founder`，memory 解析、fiction 解析、语义提取的 Dart 实现
+- [Rust 包](../packages/rust/README.md)：`quanttide_founder`，同上能力的 Rust 实现——LLM 调用用 quanttide-agent 的 `LLM`，memory/fiction 编排用 statig 状态机
