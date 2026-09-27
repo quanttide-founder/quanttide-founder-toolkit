@@ -3,3 +3,4 @@ library;
 
 export 'src/memory_engine.dart';
 export 'src/quanttide_founder_base.dart';
+export 'src/semantic_extractor.dart';

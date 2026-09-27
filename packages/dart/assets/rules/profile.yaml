@@ -1,0 +1,30 @@
+# profile 文档解析规则
+# 供 memory_engine 的 LLM 语义提取层使用
+# 说明「怎么读」，不是代码——改写法只改这里
+
+document_type: profile
+
+title:
+  source: "第一个 H1 标题"
+  fallback: "文件名去掉 .md"
+
+description:
+  location: "H1 之后、首个 H2 之前的段落"
+  meaning: "来源说明，描述这份档案从哪来、覆盖什么"
+
+sections:
+  split_by: H2
+  subsections: H3
+  extract:
+    - field: name
+      from: "H2 标题"
+    - field: paragraphs
+      from: "节内段落文本，按顺序保留"
+    - field: items
+      from: "节内列表条目"
+      format: "每条提取 name 和 detail"
+      patterns:
+        - "**名称**：详情"    # 加粗名称 + 冒号
+        - "名称：详情"         # 普通名称 + 冒号
+        - "纯文本"             # 无冒号时整句作 name，detail 为空
+  unknown_content: "保留在 paragraphs 中，不丢弃"
