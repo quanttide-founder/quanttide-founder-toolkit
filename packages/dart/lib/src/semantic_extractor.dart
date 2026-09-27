@@ -14,7 +14,8 @@ import 'dart:io';
 
 import 'package:yaml/yaml.dart';
 
-import 'memory_engine.dart';
+import 'markdown_parser.dart';
+import 'section_splitter.dart';
 
 /// 解析规则：描述一种文档类型怎么读。
 class ParseRule {
