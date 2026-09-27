@@ -1,0 +1,10 @@
+name: grade
+description: 证据分级——判断洞察条目的可靠度
+input: insight
+output: [confirmed, hypothesis]
+steps:
+  - judge: 按证据分级
+rules: |
+  多日重复或有验证/应用行动 = 已确认；
+  单次想通、未验证 = 假说；
+  被后续推翻 = 移除。

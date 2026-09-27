@@ -1,0 +1,12 @@
+name: journal
+description: 时间线——原始记录
+source:
+  directories: ["<集>/", "<集>/journal/"]
+  file_pattern: "YYYY-MM-DD.md"
+fields:
+  - name: date
+    from: 文件名
+  - name: content
+    from: 正文
+  - name: segments
+    from: 按 --- 分隔线切分

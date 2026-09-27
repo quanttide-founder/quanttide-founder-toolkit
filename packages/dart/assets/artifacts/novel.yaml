@@ -1,0 +1,14 @@
+name: novel
+description: 小说——创作目录
+source:
+  directories: ["{小说名}/"]
+  file_pattern: "index.md + {N}_{阶段}/*.md"
+fields:
+  - name: name
+    from: 目录名
+  - name: index
+    from: index.md（晋江资料）
+  - name: stages
+    from: 按 {N}_{名称} 模式发现阶段目录
+  - name: chapters
+    from: 按 {序号}_{标题}.md 发现章节

@@ -1,0 +1,10 @@
+name: classify
+description: 三问过滤——判断日志条目的去向
+input: journal
+output: [insight, profile, roadmap, journal]
+steps:
+  - scan: 按认知关键词定位候选
+  - judge: 三问判断去向，拿不准不收
+rules: |
+  「想通了什么」→ insight、「我是谁」→ profile、
+  「要做什么」→ roadmap、「发生了什么」→ 留 journal。

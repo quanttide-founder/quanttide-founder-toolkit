@@ -1,0 +1,12 @@
+name: insight
+description: 认知层——认识命题
+source:
+  directories: ["<集>/insight/"]
+  file_pattern: "*.md"
+fields:
+  - name: title
+    from: 第一个 H1，兜底文件名
+  - name: sections
+    from: 按 H2 切节（已确认/假说分级）
+  - name: items
+    from: 条目列表，提取 statement/detail/evidence
