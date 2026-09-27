@@ -1,5 +1,13 @@
 # 量潮创始人工具箱（quanttide-founder-toolkit）
 
+## 文档地图
+
+- [用户指南](user-guide/index.md)：装包、解析、规则与编排，面向使用方
+- [开发者指南](dev-guide/index.md)：架构分层、状态机设计、测试与发布，面向维护方
+- [API 参考](api-references/index.md)：core / memory / fiction 的公开接口清单
+
+代码与签名按 Dart、Rust 分标签，同页联动切换。
+
 ## 这是什么
 
 一套人机交互框架：人和 AI 在同一套知识结构上读写，还能在上面计算。

@@ -1,0 +1,28 @@
+# See docs at: https://mystmd.org
+version: 1
+project:
+  title: 量潮创始人工具箱文档
+  description: 用户指南、开发者指南与 API 参考，Dart 与 Rust 双实现
+  toc:
+    - file: index.md
+    - title: 用户指南
+      children:
+        - file: user-guide/index.md
+        - file: user-guide/quickstart.md
+        - file: user-guide/parsing.md
+        - file: user-guide/rules.md
+        - file: user-guide/orchestration.md
+    - title: 开发者指南
+      children:
+        - file: dev-guide/index.md
+        - file: dev-guide/state-machine.md
+        - file: dev-guide/contributing.md
+        - file: dev-guide/release.md
+    - title: API 参考
+      children:
+        - file: api-references/index.md
+        - file: api-references/core.md
+        - file: api-references/memory.md
+        - file: api-references/fiction.md
+site:
+  template: book-theme
