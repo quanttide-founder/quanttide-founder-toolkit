@@ -668,3 +668,99 @@ AI 拿到这句话，它只能自己猜。猜的结果是——关键词表。
 
 起点：route 的五个类别，各写一段判据。
 
+对，这个洞察是对的
+
+Destination 不该存在——它是 Artifact 的 key。
+
+—
+
+为什么
+
+看这两个东西：
+
+```rust
+// Destination 说「去哪」
+enum Destination { Insight, Profile, Roadmap, Intention, Journal }
+
+// Artifact 说「到了之后怎么读」
+struct Artifact { document_type, title, description, sections }
+```
+
+「去哪」和「怎么读」本该是同一件事。
+
+· Destination::Insight = 「送去 insight 文档」
+· 而 insight 文档的读法 = 一份 insight.yaml 加载出来的 Artifact
+
+Destination::Insight 本质上就是 insight.yaml 的名字。
+
+一个 enum 变体，对应一个 YAML 文件。这就是 key 和 value 的关系。
+
+—
+
+所以正确的结构是
+
+```rust
+struct Artifact {
+    name: String,          // ”insight“ ← 这就是 Destination
+    document_type: String,
+    title: TitleRule,
+    description: DescriptionRule,
+    sections: SectionsRule,
+    // ...
+}
+```
+
+Destination 不在了。它的五个变体，变成五份 Artifact 的 name 字段。
+
+route 变成：
+
+```rust
+fn route(text: &str, artifacts: &[Artifact]) -> &Artifact
+```
+
+输出不再是枚举变体，是一份具体的 Artifact。
+
+—
+
+这解决了前面所有问题
+
+问题一：category 被写成 type。
+
+Destination 是 category（业务定义），却写成 enum（编译期固定）。现在变成 改Artifact.name——数据驱动，可增可。
+
+问题二：判据硬编码。
+
+route 没有判据来源，所以只能写 text.contains(”要“)。现在判据来自每份 Artifact——insight.yaml 里写「什么时候算 insight」。
+
+问题三：Artifact 悬空。
+
+它加载了但没人用。现在它是 route 的输入——天然被使用。
+
+问题四：LlmExtractor 悬空。
+
+它需要 Artifact 作参数。现在 route 也返回 Artifact——整条流水线终于有了共同的数据类型。
+
+—
+
+Journal 是特殊情况
+
+Journal 不在这个映射里——它不是「送去某处」，是「留在原地」。
+
+它不是 Artifact，是默认值：
+
+```rust
+fn route(text, artifacts) -> Option<&Artifact>
+// None = 没有匹配 = 留在 journal
+```
+
+真正的 Destination 只有四个：Insight / Profile / Roadmap / Intention。Journal 是它们的补集。
+
+—
+
+一句话
+
+Destination 是 Artifact 的名字被硬编码成了 enum。
+
+拆掉这个硬编码，route、Artifact、LlmExtractor、rules.rs 全部自动接上。
+
+你指出的这一步，是整个重构的第一个杠杆。
