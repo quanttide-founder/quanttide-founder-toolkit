@@ -61,8 +61,7 @@ if let Some(classified) = machine.state().classified() {
 }
 ```
 
-判断规则（`classify` / `grade` / `decide_merge` / `cluster`…）吃 `&Engine`：
-LLM 按 YAML 判据首选，失败走显式规则降级；结构判断（`assign_number` / `find_gaps`…）是纯函数。
+判断规则（`classify` / `grade` / `decide_merge` / `cluster`…）吃 `&Engine`：LLM 按 YAML 判据首选，失败走显式规则降级；结构判断（`assign_number` / `find_gaps`…）是纯函数。
 
 ### 订阅状态流
 
@@ -88,9 +87,6 @@ let result = extractor.extract(&sections, &Artifact::from_file("../../tests/fixt
 `Engine::new(LLM::default())` 同理；`engine.judge(判据, items)` 结构化进出——
 输出必须是 `{decision, reason}`，缺 reason 视为错误，不让「缺失」看起来正常。
 
-测试与演示通过 `LLM::with_client` 注入客户端，不发网络请求：
-`semantic_llm` 按判据回 JSON（覆盖 LLM 首选路径），`demo_llm` 回纯文本（覆盖规则降级路径）。
-
 ## 规则与工作流 YAML
 
 与 Dart 包共用同一份资产（toolkit 根的 `tests/fixtures/`，同一件事只写一处）：
@@ -103,27 +99,12 @@ let workflow = quanttide_founder::Workflow::from_file("../../tests/fixtures/work
 判据写在规则里：类别归谁由 `criteria`（意图/判据/正例/反例/易混例）说了算，
 换一份 YAML 就换一种解读方式，代码不动。
 
-## 开发
+## 文档
 
-```sh
-cargo build
-cargo test
-cargo fmt --check
-cargo clippy
-
-# 解析：把 Markdown 仓库变成语义模型
-cargo run --example parse_memory        # memory 仓库解析报告
-cargo run --example parse_fiction       # fiction 仓库解析报告
-
-# 工作流：在语义模型上跑计算
-cargo run --example memory_workflow     # 四步流程：扫描→分类→分级→合并
-cargo run --example fiction_workflow    # 三步提炼→编号轴→阶段流转→包装文案
-
-# 订阅：状态流推给上层（进度 / 流水 / 闸门提示各自订阅）
-cargo run --example agent_subscribe
-```
-
-示例默认定位主仓库 `assets/memory`、`assets/fiction`，也可跟参数指定路径。
+- [docs/index.md](docs/index.md)——设计与执行的错位：设计意图、诊断与修复对照
+- [docs/criteria.md](docs/criteria.md)——九处语义判断的判据（意图/判据/边界）
+- [ROADMAP.md](ROADMAP.md)——重构路线图与验收记录
+- [CONTRIBUTING.md](CONTRIBUTING.md)——开发命令、测试与发布约定
 
 ## 许可
 
