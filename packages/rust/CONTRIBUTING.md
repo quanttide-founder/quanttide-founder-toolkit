@@ -1,6 +1,6 @@
 # 贡献指南
 
-仓库级规范（工作原则、资产单份、行为同批、提交规范）见 [toolkit 开发者指南](../../docs/dev-guide/contributing.md)，本文件只记本包的开发操作与本地约定。
+仓库级规范（工作原则、资产单份、行为同批、提交规范）见 [toolkit 开发者指南](../../docs/dev-guide/contributing.md)，本文件只记本包的开发操作与本地约定。通用逻辑（人机交互框架定位、读写与计算、规则设计）见 [toolkit 文档](../../docs/index.md)。
 
 ## 开发
 
@@ -36,6 +36,12 @@ cargo run --example agent_subscribe     # 状态流推给上层
 
 ## 资产与对齐
 
+与 Dart 包 `quanttide_founder` 行为对齐（memory 解析、fiction 解析、语义提取、四步/三步编排），两处按 Rust 的做法另选实现：
+
+- **LLM 调用**不自带客户端接口，直接用 [quanttide-agent](https://crates.io/crates/quanttide-agent) 的 `LLM`——`Engine::judge` 与 `LlmExtractor` 按判据向它要判断与填表结果；判据是 YAML 数据（`tests/fixtures/`），语义处不再有关键词匹配
+- **域编排**不用手写流转，用 [statig](https://crates.io/crates/statig) 状态机——事件进、状态出，走到哪一步一目了然；判断器作为上下文随事件进场
+
+本包自身的两条约定：
 - 规则与工作流 YAML 只在 toolkit 根 `tests/fixtures/`，本包编译期嵌入（`src/{memory,fiction}/rules.rs`），另一侧引用，不复制；
 - 与 Dart 的行为改动同批完成、测试同批补；结构性差异登记在 [CHANGELOG.md](CHANGELOG.md) 的「与 Dart 包的差异」，不口头约定。
 

@@ -2,13 +2,6 @@
 
 量潮创始人工具箱（quanttide-founder-toolkit）的 Rust 包，提供面向创始人角色的事务与工具能力。
 
-与 Dart 包 `quanttide_founder` 行为对齐（memory 解析、fiction 解析、语义提取、四步/三步编排），两处按 Rust 的做法另选实现：
-
-- **LLM 调用**不自带客户端接口，直接用 [quanttide-agent](https://crates.io/crates/quanttide-agent) 的 `LLM`——`Engine::judge` 与 `LlmExtractor` 按判据向它要判断与填表结果；判据是 YAML 数据（`tests/fixtures/`），语义处不再有关键词匹配
-- **域编排**不用手写流转，用 [statig](https://crates.io/crates/statig) 状态机——事件进、状态出，走到哪一步一目了然；判断器作为上下文随事件进场
-
-通用逻辑（人机交互框架定位、读写与计算、规则设计）见 [toolkit 文档](../../docs/index.md)。
-
 ## 安装
 
 ```toml
