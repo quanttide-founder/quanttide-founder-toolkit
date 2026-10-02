@@ -2,7 +2,7 @@
 
 重构从意图的可判定化开始。对每个核心概念写三样东西：它是什么（意图）、它怎么被判断（判据）、边界在哪（正例、反例、易混例）。判据不够可判定，实现只能自己猜，猜出来的就是关键词表。
 
-判据的执行载体是 `packages/dart/assets/rules/*.yaml` 的 `criteria` 字段与 `packages/dart/assets/workflows/*.yaml` 的 `rules` 字段——LLM 按它判断，类型按它成形。本文是这些判据的说明书，逐条列出边界与裁决。
+判据的执行载体是 `tests/fixtures/rules/*.yaml` 的 `criteria` 字段与 `tests/fixtures/workflows/*.yaml` 的 `rules` 字段——LLM 按它判断，类型按它成形。本文是这些判据的说明书，逐条列出边界与裁决。
 
 ## 去向分类
 

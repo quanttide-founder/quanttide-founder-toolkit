@@ -1,0 +1,41 @@
+# roadmap 文档的读法与判据
+# 去向分类的输入之一：「我要往哪走」由这里的 criteria 判定
+
+name: roadmap
+document_type: roadmap
+
+criteria:
+  intent: 我要往哪走——方向与取舍
+  rules: |
+    判据：文本在做方向上的取舍（决定做/不做什么、先做什么、搁置什么），不是生活琐事、不是只陈述问题。
+    拿不准时输出 journal，不收即不错收。
+  positive:
+    - 决定不动这块
+    - 优先做登录页
+  negative:
+    - 我决定今天吃面（生活琐事）
+    - 问题是接口不稳（只陈述问题，没有取舍）
+  ambiguous:
+    - 「待定」——没有可选方向则留 journal，在两三个方向间搁置则归 roadmap
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 来源说明，描述这份路线图从哪来
+sections:
+  split_by: H2
+  subsections: H3
+  extract:
+    - field: goal
+      from: 「目标」节正文
+    - field: meta_goals
+      from: 「元目标」子节条目，提取 name / detail
+    - field: core_problems
+      from: 「核心问题」节条目
+    - field: decided
+      from: 「已决策」节条目
+    - field: pending
+      from: 「待决策」节条目
+  unknown_content: 非方向层结构的主题节，保留标题与段落

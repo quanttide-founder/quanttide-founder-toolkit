@@ -15,8 +15,8 @@ use serde_json::{Value, json};
 
 const PROFILE_RULE: &str = r#"
 document_type: profile
-title: {source: 第一个 H1 标题, fallback: 文件名}
-description: {location: 首个 H2 之前的段落, meaning: 来源说明}
+title: {source: first_h1, fallback: filename}
+description: {location: preface, meaning: 来源说明}
 sections:
   split_by: H2
   subsections: H3
@@ -44,6 +44,7 @@ fn rule_based_extractor_fills_sections() {
 
     // 规则降级不猜标题
     assert_eq!(result.title, None);
+    // 说明取哪个位置由规则配置（location: preface）
     assert_eq!(result.description.as_deref(), Some("来自长期观察的档案。"));
 
     assert_eq!(result.sections.len(), 1);
@@ -64,10 +65,22 @@ fn rule_based_extractor_fills_sections() {
 }
 
 #[test]
+fn rule_based_extractor_skips_description_when_rule_says_none() {
+    let rule = Artifact::from_yaml(
+        "document_type: x\ntitle: {source: first_h1, fallback: filename}\ndescription: {location: none, meaning: 不要说明}\nsections: {split_by: H2}\n",
+    )
+    .expect("合法规则");
+    let result = RuleBasedExtractor::new()
+        .extract(&sample_sections(), &rule)
+        .expect("规则提取不失败");
+    assert_eq!(result.description, None);
+}
+
+#[test]
 fn llm_extractor_parses_fenced_json_response() {
     // 响应外面包了 markdown 代码块——quanttide-agent 的 parse_structured_output 负责剥壳
     let llm = json_llm(
-        "```json\n{\"title\":\"档案\",\"description\":\"说明\",\"sections\":[{\"name\":\"节\",\"paragraphs\":[\"段\"]}]}\n```",
+        "```json\n{\"title\":\"档案\",\"description\":\"说明\",\"sections\":[{\"name\":\"节\",\"paragraphs\":[\"段\"]}],\"fields\":{\"motif\":\"赶末班车\"}}\n```",
     );
     let rule = Artifact::from_yaml(PROFILE_RULE).expect("合法规则");
     let result = LlmExtractor::new(llm)
@@ -78,6 +91,9 @@ fn llm_extractor_parses_fenced_json_response() {
     assert_eq!(result.description.as_deref(), Some("说明"));
     assert_eq!(result.sections.len(), 1);
     assert_eq!(result.sections[0]["name"], json!("节"));
+    // extract 字段落在 fields 里
+    assert_eq!(result.fields["motif"], json!("赶末班车"));
+    assert_eq!(result.to_json()["fields"]["motif"], json!("赶末班车"));
 }
 
 #[test]
@@ -91,13 +107,35 @@ fn llm_extractor_rejects_response_without_json() {
 }
 
 #[test]
-fn judge_asks_llm_and_returns_decision() {
-    let engine = Engine::new(demo_llm());
+fn judge_asks_llm_for_structured_decision_and_reason() {
+    let llm = json_llm("{\"decision\":\"confirmed\",\"reason\":\"多日重复\"}");
+    let engine = Engine::new(llm);
     let judgment = engine
         .judge("多日重复 = 已确认", &[json!("缓存的规律是 TTL 太长")])
         .expect("LLM 调用成功");
-    assert_eq!(judgment.decision, "（演示模式，未调用 LLM）");
-    assert!(judgment.reason.is_none());
+    assert_eq!(judgment.decision, "confirmed");
+    // reason 必填——判断必须给出理由
+    assert_eq!(judgment.reason, "多日重复");
+}
+
+#[test]
+fn judge_rejects_unstructured_response() {
+    // 回纯文本 = 判断失败，不把整段文本当决策
+    let engine = Engine::new(demo_llm());
+    let err = engine
+        .judge("判据", &[json!("条目")])
+        .expect_err("非结构化响应应报错");
+    assert!(matches!(err, Error::Parse(_)));
+}
+
+#[test]
+fn judge_rejects_decision_without_reason() {
+    let llm = json_llm("{\"decision\":\"confirmed\"}");
+    let engine = Engine::new(llm);
+    let err = engine
+        .judge("判据", &[json!("条目")])
+        .expect_err("缺 reason 应报错");
+    assert!(err.to_string().contains("缺少 reason"));
 }
 
 #[test]
@@ -123,23 +161,44 @@ fn run_walks_workflow_steps_in_order() {
         "name: classify\ninput: journal\nsteps:\n  - scan: 定位\n  - judge: 判断\nrules: 三问\n",
     )
     .expect("合法 YAML");
-    let engine = Engine::new(demo_llm());
+    let llm = json_llm("{\"decision\":\"keep\",\"reason\":\"照规则判\"}");
+    let engine = Engine::new(llm);
     let result = engine
         .run(&workflow, vec![json!("一条日志"), json!("另一条日志")])
         .expect("执行成功");
 
-    // scan 步的关键词表是占位空表（同 Dart），因此不产出候选
-    assert!(result.items.is_empty());
+    // rules 里没有关键词行 → scan 不产出候选；条目原样留给后续步骤
+    assert!(result.candidates.is_empty());
+    assert_eq!(result.items, vec![json!("一条日志"), json!("另一条日志")]);
     assert_eq!(result.judgments.len(), 1);
-    assert_eq!(result.judgments[0].decision, "（演示模式，未调用 LLM）");
+    assert_eq!(result.judgments[0].decision, "keep");
 }
 
 #[test]
-fn run_rejects_unknown_verb() {
-    let workflow = Workflow::from_yaml("name: x\ninput: journal\nsteps:\n  - echo: 说一句\n")
-        .expect("合法 YAML");
-    let engine = Engine::new(demo_llm());
-    let err = engine.run(&workflow, vec![]).expect_err("未知动词应报错");
-    assert!(matches!(err, Error::UnknownVerb(ref verb) if verb == "echo"));
+fn run_scans_by_keywords_read_from_rules() {
+    // 关键词是数据：从 workflow 的 rules 里读，scan 定位候选但不清空条目
+    let workflow = Workflow::from_yaml(
+        "name: locate\ninput: journal\nsteps:\n  - scan: 按关键词表匹配\nrules: |\n  认知类关键词：发现、原来。\n",
+    )
+    .expect("合法 YAML");
+    let llm = json_llm("{\"decision\":\"keep\",\"reason\":\"照规则判\"}");
+    let engine = Engine::new(llm);
+    let result = engine
+        .run(
+            &workflow,
+            vec![json!("今天发现缓存的规律"), json!("没进展")],
+        )
+        .expect("执行成功");
+
+    assert_eq!(result.candidates.len(), 1);
+    assert_eq!(result.candidates[0].text, "今天发现缓存的规律");
+    assert_eq!(result.items.len(), 2); // scan 不清空条目
+}
+
+#[test]
+fn unknown_verb_fails_at_load_time() {
+    // 动词是类型：加载期就拒绝，不留到运行期
+    let err = Workflow::from_yaml("name: x\ninput: journal\nsteps:\n  - echo: 说一句\n")
+        .expect_err("未知动词应在加载期报错");
     assert!(err.to_string().contains("只认 scan / judge / merge"));
 }

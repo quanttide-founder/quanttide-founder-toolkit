@@ -5,7 +5,7 @@
 /// - 第二层（splitSections）：结构切分，按标题层级切节
 /// - 第三层（本文件）：语义提取，规则说明 + LLM，产出类型化模型
 ///
-/// 规则文件位于 `assets/rules/<type>.yaml`，描述字段来源与提取模式。
+/// 规则文件位于 `tests/fixtures/rules/<type>.yaml`，描述字段来源与提取模式。
 /// LLM 按规则填表，不自由发挥——规则说了提取什么字段、什么格式。
 library;
 

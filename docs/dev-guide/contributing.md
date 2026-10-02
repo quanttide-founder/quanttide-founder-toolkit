@@ -47,7 +47,7 @@ cargo run --example parse_memory
 1. 行为同改：解析、路由、分级、合并、编号轴这些语义改动必须两侧同批完成，测试同批补
 2. 命名对应：类型名两侧一致（`MemorySet`、`InsightItem`），方法名 Dart 驼峰、Rust 蛇形（`decideMerge` 对 `decide_merge`）
 3. 差异登记：结构性取舍不同（LLM 客户端、状态机、错误通道）写进 `packages/rust/CHANGELOG.md` 的「与 Dart 包的差异」，不口头约定
-4. 资产单份：规则与工作流 YAML 只在 `packages/dart/assets/`，另一侧引用，不复制
+4. 资产单份：规则与工作流 YAML 只在 toolkit 根的 `tests/fixtures/`，两包引用，不复制
 
 ## 提交
 

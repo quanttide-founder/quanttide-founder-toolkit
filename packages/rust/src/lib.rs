@@ -24,7 +24,10 @@ pub use crate::core::parse::{
     Block, BlockType, MarkdownDocument, NamedItem, RawSection, TextSection, parse_named_item,
     split_sections,
 };
-pub use crate::core::rules::{Artifact, Step, Workflow};
+pub use crate::core::rules::{
+    Action, Artifact, Criteria, DescriptionLocation, GradeRule, SplitLevel, Step, TitleSource,
+    Verb, Workflow,
+};
 pub use crate::error::Error;
 pub use crate::fiction::models::{
     Chapter, EmotionalDiary, Novel, Observation, SocialObservation, Stage,
@@ -36,10 +39,10 @@ pub use crate::fiction::states::{
 };
 pub use crate::memory::models::{
     InsightDoc, InsightGrade, InsightItem, InsightSection, JournalEntry, JournalSource, ProfileDoc,
-    RoadmapDoc,
+    RoadmapDoc, Tag,
 };
 pub use crate::memory::repository::{MemoryRepository, MemorySet};
 pub use crate::memory::states::{
-    ClassifiedEntry, Destination, Event as MemoryEvent, GradedInsight, MemoryFlow, MemoryState,
-    MergeAction, MergeDecision,
+    ClassifiedEntry, Event as MemoryEvent, GradedInsight, MemoryFlow, MemoryState, MergeAction,
+    MergeDecision,
 };

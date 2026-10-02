@@ -15,8 +15,6 @@ pub enum Error {
     Io(std::io::Error),
     /// 定义（YAML / JSON）或数据解析失败。
     Parse(String),
-    /// workflow 里出现引擎不认识的动词。
-    UnknownVerb(String),
     /// LLM 调用失败。
     Llm(LLMError),
 }
@@ -29,9 +27,6 @@ impl fmt::Display for Error {
             }
             Error::Io(e) => write!(f, "{e}"),
             Error::Parse(msg) => write!(f, "{msg}"),
-            Error::UnknownVerb(verb) => {
-                write!(f, "未知动词: {verb}（只认 scan / judge / merge）")
-            }
             Error::Llm(e) => write!(f, "{e}"),
         }
     }

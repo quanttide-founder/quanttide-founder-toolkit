@@ -1,0 +1,18 @@
+name: cluster
+description: 聚类——同一认识跨日期合并
+input: journal
+output: [insight]
+steps:
+  - judge: 判断本质是否相同
+  - merge: 合并为一条
+rules: |
+  同一认识跨日期合并为一条，判断依据是本质相同而非措辞相似。
+  命题的对象与因果关系一致才算相同，用词重合不算。
+  同本质输出 same，不同输出 different。
+  新条目明确否定旧条目且指向同一事 = 被推翻，输出 refuted；否则输出 not_refuted。
+# 合并策略：首项 add（没有已有条目时的机械结果），末项 crossLink（判断失败的兜底）
+actions:
+  - add: 新线索，没有同本质的已有条目 → 新增
+  - rewrite: 本质相同 → 就地改写
+  - replace: 被后续推翻 → 直接替换
+  - crossLink: 重复但不同本质 → 留互链，不重复收录

@@ -43,7 +43,7 @@ assets/
 **artifact**（名词）定义一个语义模型长什么样、从哪提取：
 
 ```yaml
-# assets/artifacts/journal.yaml
+# tests/fixtures/artifacts/journal.yaml
 name: journal
 description: 时间线——原始记录
 source:
@@ -59,7 +59,7 @@ fields:
 **workflow**（动词）定义一个任务怎么做，用引擎的三个动词组装：
 
 ```yaml
-# assets/workflows/classify.yaml
+# tests/fixtures/workflows/classify.yaml
 name: classify
 description: 三问过滤——判断日志条目的去向
 input: journal

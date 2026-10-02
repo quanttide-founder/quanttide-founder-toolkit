@@ -1,0 +1,46 @@
+# insight 文档的读法与判据
+# name + criteria 是去向分类的输入（原 Destination 的四个变体就是这四份文件的名字），
+# title / description / sections 是读法——改解读、改判据只改这里，代码不动
+
+name: insight
+document_type: insight
+
+criteria:
+  intent: 我发现了什么——一个新认识
+  rules: |
+    判据：文本在表达一个新认识（对规律、原因、机制的重新理解），不是评价、不是意愿、不是事件复述。
+    拿不准时输出 journal，不收即不错收。
+  positive:
+    - 我发现我不适合做产品
+    - 原来问题在这里
+  negative:
+    - 我要放弃（这是意愿，不是认识）
+    - 这个方法很重要（这是评价，不是新认识）
+  ambiguous:
+    - 「我一直在想……」——若最终落到新认识则归 insight，只记录思考过程则留 journal
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 来源说明，描述这份洞察从哪来
+sections:
+  split_by: H2
+  subsections: H3
+  extract:
+    - field: items
+      from: 条目列表，提取 statement / detail / evidence
+      patterns:
+        - "**命题**：解释"
+        - "命题"
+  unknown_content: 保留在 paragraphs 中，不丢弃
+
+# 分级类别：category 是数据不是枚举，节标题按 titles 对号，分级名按 name 输出
+grades:
+  - name: confirmed
+    titles: [已确认]
+    note: 升级档——多日重复或有验证/应用行动；顺序即降级规则的首项
+  - name: hypothesis
+    titles: [假说]
+    note: 保守档——单次想通、未验证，被后续推翻降级到此；顺序即降级规则的末项

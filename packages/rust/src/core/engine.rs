@@ -10,19 +10,21 @@ use quanttide_agent::message::Message;
 use serde_json::{Map, Value};
 
 use crate::core::parse::{BlockType, RawSection, parse_named_item};
-use crate::core::rules::{Artifact, Workflow};
+use crate::core::rules::{Artifact, DescriptionLocation, Verb, Workflow};
 use crate::error::Error;
 
 // ---------------------------------------------------------------------------
 // 语义提取
 // ---------------------------------------------------------------------------
 
-/// 语义提取结果：标题、说明、章节。
+/// 语义提取结果：标题、说明、章节、字段。
 #[derive(Debug, Clone, Default)]
 pub struct ExtractionResult {
     pub title: Option<String>,
     pub description: Option<String>,
     pub sections: Vec<Map<String, Value>>,
+    /// 规则 `extract` 列出的字段（如母题 / 场景、标题 / 简介 / 立意），由 LLM 按规则填表。
+    pub fields: Map<String, Value>,
 }
 
 impl ExtractionResult {
@@ -34,20 +36,21 @@ impl ExtractionResult {
                 "sections".to_string(),
                 Value::Array(self.sections.iter().cloned().map(Value::Object).collect()),
             ),
+            ("fields".to_string(), Value::Object(self.fields.clone())),
         ]))
     }
 }
 
 /// 语义提取器：接收 Section 树 + 规则，产出语义模型。
 ///
-/// 提取方式可插拔：
-/// - [`RuleBasedExtractor`]：纯规则提取（无 LLM，降级方案）
-/// - [`LlmExtractor`]：LLM 按规则填表（首选）
+/// 提取方式可插拔，主次有别：
+/// - [`LlmExtractor`]：LLM 按规则填表——首选
+/// - [`RuleBasedExtractor`]：纯规则提取（无 LLM）——降级，不是主实现
 pub trait SemanticExtractor {
     fn extract(&self, sections: &[RawSection], rule: &Artifact) -> Result<ExtractionResult, Error>;
 }
 
-/// 规则提取器：无 LLM 时的降级方案，按规则中的 patterns 做文本匹配。
+/// 规则提取器：无 LLM 时的降级方案，按规则配置提取（说明取哪个位置由 `description.location` 定）。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RuleBasedExtractor;
 
@@ -58,31 +61,35 @@ impl RuleBasedExtractor {
 }
 
 impl SemanticExtractor for RuleBasedExtractor {
-    fn extract(
-        &self,
-        sections: &[RawSection],
-        _rule: &Artifact,
-    ) -> Result<ExtractionResult, Error> {
+    fn extract(&self, sections: &[RawSection], rule: &Artifact) -> Result<ExtractionResult, Error> {
         let result_sections: Vec<Map<String, Value>> =
             sections.iter().skip(1).map(section_to_json).collect();
 
-        // 说明取前言节的段落；标题留给 LLM 提取器（规则降级不猜标题）。
-        let description = sections.first().map(|first| {
-            first
-                .blocks
-                .iter()
-                .filter(|b| b.kind == BlockType::Paragraph)
-                .map(|b| b.text.as_str())
-                .collect::<Vec<_>>()
-                .join("\n")
-        });
+        // 说明取哪个位置由规则配置；规则没让取就不猜。标题留给 LLM 提取器。
+        let description = match rule.description.location {
+            DescriptionLocation::Preface => sections.first().map(join_paragraphs),
+            DescriptionLocation::Section => sections.get(1).map(join_paragraphs),
+            DescriptionLocation::None => None,
+        };
 
         Ok(ExtractionResult {
             title: None,
             description,
             sections: result_sections,
+            fields: Map::new(),
         })
     }
+}
+
+/// 节内段落按顺序拼接。
+fn join_paragraphs(section: &RawSection) -> String {
+    section
+        .blocks
+        .iter()
+        .filter(|b| b.kind == BlockType::Paragraph)
+        .map(|b| b.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// 单个节 → JSON 对象（name / paragraphs / items / subsections）。
@@ -178,13 +185,13 @@ impl LlmExtractor {
 
         buf.push_str("\n## 输出格式\n");
         buf.push_str(
-            "{\"title\": \"...\", \"description\": \"...\", \"sections\": [{\"name\": \"...\", \"paragraphs\": [...], \"items\": [{\"name\": \"...\", \"detail\": \"...\"}]}]}\n",
+            "{\"title\": \"...\", \"description\": \"...\", \"sections\": [{\"name\": \"...\", \"paragraphs\": [...], \"items\": [{\"name\": \"...\", \"detail\": \"...\"}]}], \"fields\": {\"field\": \"...\"}}\n",
         );
         buf
     }
 
     /// 从 LLM 响应里取出 JSON 并落成提取结果；取不到 JSON 视为错误。
-    fn parse_response(response: &str) -> Result<ExtractionResult, Error> {
+    pub fn parse_response(response: &str) -> Result<ExtractionResult, Error> {
         let value = quanttide_agent::parse_structured_output(response).map_err(Error::Parse)?;
         let title = optional_string(&value, "title")?;
         let description = optional_string(&value, "description")?;
@@ -202,10 +209,16 @@ impl LlmExtractor {
             }
             Some(_) => return Err(Error::Parse("sections 不是数组".to_string())),
         };
+        let fields = match value.get("fields") {
+            None | Some(Value::Null) => Map::new(),
+            Some(Value::Object(map)) => map.clone(),
+            Some(_) => return Err(Error::Parse("fields 不是对象".to_string())),
+        };
         Ok(ExtractionResult {
             title,
             description,
             sections,
+            fields,
         })
     }
 }
@@ -216,6 +229,33 @@ fn optional_string(value: &Value, key: &str) -> Result<Option<String>, Error> {
         Some(Value::String(text)) => Ok(Some(text.clone())),
         Some(_) => Err(Error::Parse(format!("{key} 不是字符串"))),
     }
+}
+
+/// 必填字符串：判断结果缺 decision / reason 视为错误，不让「缺失」看起来正常。
+fn required_string(value: &Value, key: &str) -> Result<String, Error> {
+    optional_string(value, key)?.ok_or_else(|| Error::Parse(format!("判断结果缺少 {key}")))
+}
+
+/// 从 workflow 的 rules 文本里读关键词（含「关键词」的行，冒号后按分隔符切）。
+///
+/// 关键词是数据：locate 这类 workflow 把关键词表写在 YAML 里，代码不持有关键词表。
+fn keywords_from_rules(rules: &str) -> Vec<String> {
+    let mut keywords = Vec::new();
+    for line in rules.lines() {
+        let Some((label, rest)) = line.split_once(['：', ':']) else {
+            continue;
+        };
+        if !label.contains("关键词") {
+            continue;
+        }
+        for token in rest.split(['、', '，', ',', '；', ';', '。', '\n', ' ', '\t']) {
+            let token = token.trim();
+            if !token.is_empty() {
+                keywords.push(token.to_string());
+            }
+        }
+    }
+    keywords
 }
 
 impl SemanticExtractor for LlmExtractor {
@@ -245,13 +285,15 @@ fn item_text(item: &Value) -> String {
 pub struct WorkflowResult {
     pub items: Vec<Value>,
     pub judgments: Vec<Judgment>,
+    /// scan 步定位到的候选——scan 定位候选，不改动条目。
+    pub candidates: Vec<Candidate>,
 }
 
-/// 判断结果。
+/// 判断结果：decision 是判定值，reason 是判定理由（判断必须给出理由，不设缺失）。
 #[derive(Debug, Clone)]
 pub struct Judgment {
     pub decision: String,
-    pub reason: Option<String>,
+    pub reason: String,
 }
 
 /// 候选条目。
@@ -275,31 +317,31 @@ impl Engine {
     pub fn run(&self, workflow: &Workflow, input: Vec<Value>) -> Result<WorkflowResult, Error> {
         let mut items = input;
         let mut judgments: Vec<Judgment> = Vec::new();
+        let mut candidates: Vec<Candidate> = Vec::new();
 
         for step in &workflow.steps {
-            match step.verb.as_str() {
-                "scan" => {
-                    // 关键词由调用方指定或从 rules 解析；与 Dart 侧一致，当前为空表，
-                    // scan 步因此不产出候选。
-                    let keywords: Vec<String> = Vec::new();
-                    items.retain(|item| {
-                        let text = item_text(item);
-                        keywords.iter().any(|kw| text.contains(kw.as_str()))
-                    });
+            match step.verb {
+                // 关键词是数据，从 workflow 的 rules 里读，不在代码里；scan 定位候选，不动条目
+                Verb::Scan => {
+                    let keywords = keywords_from_rules(&workflow.rules);
+                    candidates.extend(Self::scan(&items, &keywords));
                 }
-                "judge" => {
+                Verb::Judge => {
                     let judgment = self.judge(&workflow.rules, &items)?;
                     judgments.push(judgment);
                     // judge 产出去向标注，不改 items
                 }
-                "merge" => {
+                Verb::Merge => {
                     items = Self::merge(&items, &[]);
                 }
-                verb => return Err(Error::UnknownVerb(verb.to_string())),
             }
         }
 
-        Ok(WorkflowResult { items, judgments })
+        Ok(WorkflowResult {
+            items,
+            judgments,
+            candidates,
+        })
     }
 
     /// 按关键词定位候选（代码）。
@@ -317,18 +359,33 @@ impl Engine {
         candidates
     }
 
-    /// 让 LLM 按规则判断（LLM）。
-    pub fn judge(&self, rules: &str, items: &[Value]) -> Result<Judgment, Error> {
+    /// 让 LLM 按判据判断（LLM）：结构化进、结构化出，decision 与 reason 都必填。
+    pub fn judge(&self, criteria: &str, items: &[Value]) -> Result<Judgment, Error> {
         let listed = Value::Array(items.to_vec());
-        let prompt =
-            format!("按以下规则判断，只输出决策和原因：\n\n规则：{rules}\n\n条目：{listed}");
+        let prompt = format!(
+            "按以下判据判断，只输出 JSON，不要解释。\n\n## 判据\n{criteria}\n\n## 条目\n{listed}\n\n## 输出格式\n{{\"decision\": \"...\", \"reason\": \"...\"}}\n"
+        );
         let response = self
             .llm
             .complete(&[Message::new("user", &prompt)], CompleteOptions::default())?;
-        Ok(Judgment {
-            decision: response.content.trim().to_string(),
-            reason: None,
-        })
+        let value =
+            quanttide_agent::parse_structured_output(&response.content).map_err(Error::Parse)?;
+        let decision = required_string(&value, "decision")?;
+        let reason = required_string(&value, "reason")?;
+        Ok(Judgment { decision, reason })
+    }
+
+    /// 语义填表（LLM 首选）：按 Artifact 规则从 Section 树提取结构化数据。
+    pub fn extract(
+        &self,
+        sections: &[RawSection],
+        rule: &Artifact,
+    ) -> Result<ExtractionResult, Error> {
+        let prompt = LlmExtractor::build_prompt(sections, rule);
+        let response = self
+            .llm
+            .complete(&[Message::new("user", &prompt)], CompleteOptions::default())?;
+        LlmExtractor::parse_response(&response.content)
     }
 
     /// 按策略合并条目（代码）。

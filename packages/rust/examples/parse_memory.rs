@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::NaiveDate;
 use quanttide_founder::memory::models::JournalSource;
-use quanttide_founder::{InsightGrade, MemoryRepository, MemorySet};
+use quanttide_founder::{MemoryRepository, MemorySet};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = match std::env::args().nth(1) {
@@ -95,8 +95,8 @@ fn print_set(set: &MemorySet) {
     if !set.insights.is_empty() {
         println!("  洞察：{} 份", set.insights.len());
         for insight in &set.insights {
-            let confirmed = insight.items_of(InsightGrade::Confirmed).count();
-            let hypothesis = insight.items_of(InsightGrade::Hypothesis).count();
+            let confirmed = insight.items_of("confirmed").count();
+            let hypothesis = insight.items_of("hypothesis").count();
             let mut parts: Vec<String> = Vec::new();
             if confirmed > 0 {
                 parts.push(format!("已确认 {confirmed} 条"));

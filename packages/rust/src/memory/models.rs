@@ -1,7 +1,9 @@
 //! memory/models：域模型（纯数据）。
 //!
-//! `parse` 只吃字符串——文件读取归 repository，本文件不碰磁盘。
+//! `parse` 只吃字符串——文件读取归 repository，本文件不碰磁盘；
+//! 怎么切节、分级叫什么由 Artifact 规则给，不写死在代码里。
 
+use std::fmt;
 use std::sync::LazyLock;
 
 use chrono::NaiveDate;
@@ -9,8 +11,9 @@ use regex::Regex;
 
 use crate::core::parse::{
     BlockType, MarkdownDocument, NamedItem, RawSection, TextSection, parse_named_item,
-    split_sections,
 };
+use crate::core::rules::{Artifact, DescriptionLocation, GradeRule};
+use crate::memory::rules::{INSIGHT, PROFILE, ROADMAP};
 
 /// 日志分段：`---` 类分隔线。
 static SEGMENT_SPLIT: LazyLock<Regex> =
@@ -46,9 +49,39 @@ impl JournalEntry {
             .collect()
     }
 
+    /// 标签从元数据提取，不算语义——日期从文件名来，来源从路径来。
+    pub fn tags(&self) -> Vec<Tag> {
+        vec![
+            Tag::new("date", self.date.to_string()),
+            Tag::new(
+                "source",
+                match self.source {
+                    JournalSource::Root => "root",
+                    JournalSource::Archive => "archive",
+                },
+            ),
+        ]
+    }
+
     /// 去掉全部空白后的字数。
     pub fn character_count(&self) -> usize {
         self.content.chars().filter(|c| !c.is_whitespace()).count()
+    }
+}
+
+/// KV 标签：三分法里的 tag，从元数据提取，与语义判断分开。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tag {
+    pub key: String,
+    pub value: String,
+}
+
+impl Tag {
+    pub fn new(key: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            value: value.into(),
+        }
     }
 }
 
@@ -70,22 +103,21 @@ pub struct ProfileDoc {
 
 impl ProfileDoc {
     pub fn parse(path: impl Into<String>, content: &str) -> Self {
+        Self::parse_with(path, content, &PROFILE)
+    }
+
+    /// 按指定规则解析：切分层级与说明位置来自规则（换一份 YAML 就换一种解读）。
+    pub fn parse_with(path: impl Into<String>, content: &str, rule: &Artifact) -> Self {
         let path = path.into();
         let name = base_name(&path);
         let doc = MarkdownDocument::parse(path.clone(), content);
-        let raw = split_sections(&doc.blocks, 2);
-        let description = raw
-            .first()
-            .map(|preface| {
-                preface
-                    .blocks
-                    .iter()
-                    .filter(|b| b.kind == BlockType::Paragraph)
-                    .map(|b| b.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })
-            .unwrap_or_default();
+        let raw = rule.split(&doc.blocks);
+        let description = match rule.description.location {
+            DescriptionLocation::Preface => raw.first().map(join_paragraphs),
+            DescriptionLocation::Section => raw.get(1).map(join_paragraphs),
+            DescriptionLocation::None => None,
+        }
+        .unwrap_or_default();
         ProfileDoc {
             path,
             name,
@@ -100,11 +132,29 @@ impl ProfileDoc {
 // 认知层：洞察
 // ---------------------------------------------------------------------------
 
-/// 证据分级：已确认 / 假说。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InsightGrade {
-    Confirmed,
-    Hypothesis,
+/// 证据分级：名字来自 insight 规则的 `grades`（category 是数据，不是编译期枚举）。
+///
+/// 内置规则给出 `confirmed`（已确认）与 `hypothesis`（假说）；换一份规则就是另一组分级。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InsightGrade {
+    name: String,
+}
+
+impl InsightGrade {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+
+    /// 与规则里的分级名一致。
+    pub fn as_str(&self) -> &str {
+        &self.name
+    }
+}
+
+impl fmt::Display for InsightGrade {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.name)
+    }
 }
 
 /// 一条洞察：命题 + 解释 + 证据。
@@ -148,30 +198,35 @@ pub struct InsightDoc {
 }
 
 impl InsightDoc {
-    /// 某一分级下的全部条目。
-    pub fn items_of(&self, grade: InsightGrade) -> impl Iterator<Item = &InsightItem> {
+    /// 某一分级下的全部条目（按分级名，如 `confirmed`）。
+    pub fn items_of(&self, grade: &str) -> impl Iterator<Item = &InsightItem> {
         self.sections
             .iter()
-            .filter(move |s| s.grade == Some(grade))
+            .filter(move |s| s.grade.as_ref().is_some_and(|g| g.as_str() == grade))
             .flat_map(|s| s.items.iter())
     }
 
     pub fn parse(path: impl Into<String>, content: &str) -> Self {
+        Self::parse_with(path, content, &INSIGHT)
+    }
+
+    /// 按指定规则解析：切分层级与分级类别来自规则（节标题按 `grades.titles` 对号）。
+    pub fn parse_with(path: impl Into<String>, content: &str, rule: &Artifact) -> Self {
         let path = path.into();
         let name = base_name(&path);
         let doc = MarkdownDocument::parse(path.clone(), content);
-        let raw = split_sections(&doc.blocks, 2);
+        let raw = rule.split(&doc.blocks);
         let mut parsed: Vec<InsightSection> = Vec::new();
 
         if raw.len() == 1 {
             // 无二级标题：全文作为一节（主题式散文）。
-            let mut built = build_section(&raw[0]);
+            let mut built = build_section(&raw[0], &rule.grades);
             if built.title.is_empty() {
                 built.title = doc.title().map_or_else(|| name.clone(), str::to_string);
             }
             parsed.push(built);
         } else {
-            parsed.extend(raw.iter().skip(1).map(build_section));
+            parsed.extend(raw.iter().skip(1).map(|s| build_section(s, &rule.grades)));
         }
 
         InsightDoc {
@@ -183,14 +238,12 @@ impl InsightDoc {
     }
 }
 
-fn build_section(raw: &RawSection) -> InsightSection {
-    let grade = if raw.title.contains("已确认") {
-        Some(InsightGrade::Confirmed)
-    } else if raw.title.contains("假说") {
-        Some(InsightGrade::Hypothesis)
-    } else {
-        None
-    };
+fn build_section(raw: &RawSection, grades: &[GradeRule]) -> InsightSection {
+    // 分级是数据：节标题命中哪条 grades.titles，就归哪一级
+    let grade = grades
+        .iter()
+        .find(|grade| grade.titles.iter().any(|title| raw.title.contains(title)))
+        .map(|grade| InsightGrade::new(&grade.name));
     let mut section = InsightSection {
         title: raw.title.clone(),
         grade,
@@ -250,10 +303,15 @@ pub struct RoadmapDoc {
 
 impl RoadmapDoc {
     pub fn parse(path: impl Into<String>, content: &str) -> Self {
+        Self::parse_with(path, content, &ROADMAP)
+    }
+
+    /// 按指定规则解析：切分层级来自规则。
+    pub fn parse_with(path: impl Into<String>, content: &str, rule: &Artifact) -> Self {
         let path = path.into();
         let name = base_name(&path);
         let doc = MarkdownDocument::parse(path.clone(), content);
-        let raw = split_sections(&doc.blocks, 2);
+        let raw = rule.split(&doc.blocks);
 
         let mut goal = None;
         let mut meta_goals: Vec<NamedItem> = Vec::new();
@@ -324,4 +382,15 @@ fn named_bullets(section: &RawSection) -> Vec<NamedItem> {
 fn base_name(path: &str) -> String {
     let name = path.rsplit('/').next().unwrap_or(path);
     name.strip_suffix(".md").unwrap_or(name).to_string()
+}
+
+/// 节内段落按顺序拼接。
+fn join_paragraphs(section: &RawSection) -> String {
+    section
+        .blocks
+        .iter()
+        .filter(|b| b.kind == BlockType::Paragraph)
+        .map(|b| b.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }

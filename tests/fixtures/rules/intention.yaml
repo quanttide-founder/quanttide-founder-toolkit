@@ -1,0 +1,35 @@
+# intention 的读法与判据
+# 去向分类的输入之一：「我到底想要什么」由这里的 criteria 判定
+
+name: intention
+document_type: intention
+
+criteria:
+  intent: 我到底想要什么——意愿与边界
+  rules: |
+    判据：文本回答「谁想要什么」——意愿、要求、边界，且主语是写作者自己。
+    拿不准时输出 journal，不收即不错收。
+  positive:
+    - 先把发布流程澄清
+    - 不要碰这块，交给他
+  negative:
+    - 应该先做最小闭环（这是对事的建议，属 roadmap）
+    - 要下雨了（客观陈述，无人的意愿）
+  ambiguous:
+    - 「要」字句——说不出主语与想要之物的，留 journal
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 来源说明，记录这份意愿从哪来
+sections:
+  split_by: H2
+  extract:
+    - field: items
+      from: 意愿条目，提取 name / detail
+      patterns:
+        - "**要做什么**：边界与理由"
+        - "要做什么"
+  unknown_content: 保留在 paragraphs 中，不丢弃

@@ -1,12 +1,15 @@
 //! fiction 域：仓库装载 + 三步提炼状态机 + 编号轴/包装文案。
+//!
+//! 语义步骤走 LLM 首选（`semantic_llm`）；规则降级用 `demo_llm`（判断必然失败）。
 
 mod common;
 
-use common::fiction_fixture;
+use common::{demo_llm, fiction_fixture, semantic_llm};
 use quanttide_founder::Error;
+use quanttide_founder::core::engine::Engine;
 use quanttide_founder::fiction::states::{
     Event, FictionFlow, FictionState, assign_number, check_stage, extract_packaging, find_gaps,
-    stage_flow,
+    packaging_by_rules, stage_flow,
 };
 use quanttide_founder::{EmotionalDiary, FictionRepository};
 use statig::prelude::*;
@@ -16,6 +19,10 @@ fn load_fixture() -> (tempfile::TempDir, FictionRepository) {
     fiction_fixture(dir.path());
     let repo = FictionRepository::load(dir.path()).expect("装载仓库");
     (dir, repo)
+}
+
+fn semantic_engine() -> Engine {
+    Engine::new(semantic_llm())
 }
 
 // ---------------------------------------------------------------------------
@@ -98,61 +105,67 @@ fn sample_diary() -> EmotionalDiary {
 #[test]
 fn events_walk_idle_sampled_observed_fragmented() {
     let diary = sample_diary();
+    let mut engine = semantic_engine();
     let mut machine = FictionFlow.state_machine();
 
     // 来早了：没取样就落实，不理会
-    machine.handle(&Event::Settle);
+    machine.handle_with_context(&Event::Settle, &mut engine);
     assert!(matches!(machine.state(), FictionState::Idle {}));
     assert!(machine.state().fragment().is_none());
 
-    machine.handle(&Event::Sample(diary.clone()));
+    machine.handle_with_context(&Event::Sample(diary.clone()), &mut engine);
     let (sample, source) = match machine.state() {
         FictionState::Sampled { sample, source } => (sample.clone(), source.clone()),
         other => panic!("应处于 Sampled，实际 {other:?}"),
     };
-    // 取样挑出含具体细节的句子（第一句只有情绪，没有动作）
+    // 取样按判据挑出含具体细节的句子（第一句只有情绪，没有动作）
     assert!(sample.contains("看着拿手机的人"));
     assert_eq!(source, "深夜地铁");
 
     // 没观察展开就不给片段
-    machine.handle(&Event::Settle);
+    machine.handle_with_context(&Event::Settle, &mut engine);
     assert!(matches!(machine.state(), FictionState::Sampled { .. }));
     assert!(machine.state().fragment().is_none());
 
-    machine.handle(&Event::Expand);
+    machine.handle_with_context(&Event::Expand, &mut engine);
     let observation = {
         let (observation, _) = machine.state().observation().expect("已观察");
         assert_eq!(observation, sample);
         observation.to_string()
     };
-    machine.handle(&Event::Settle);
+    machine.handle_with_context(&Event::Settle, &mut engine);
 
     let fragment = machine.state().fragment().expect("已提炼");
-    assert_eq!(fragment.motif, "深夜地铁");
+    // 母题与场景由 LLM 按 fragment.yaml 填表；source 是素材标题
+    assert_eq!(fragment.motif, "赶末班车的角色");
+    assert_eq!(fragment.scene, "她把票塞进他手里");
     assert_eq!(fragment.source, "深夜地铁");
-    assert_eq!(fragment.scene, observation);
+    assert_eq!(observation, sample);
 }
 
 #[test]
 fn extract_runs_all_three_steps() {
     let diary = sample_diary();
-    let fragment = FictionFlow::extract(&diary);
-    assert_eq!(fragment.motif, "深夜地铁");
-    assert!(fragment.scene.contains("赶末班车"));
+    let mut engine = semantic_engine();
+    let fragment = FictionFlow::extract(&mut engine, &diary);
+    assert_eq!(fragment.motif, "赶末班车的角色");
+    assert_eq!(fragment.scene, "她把票塞进他手里");
 
-    let fragments = FictionFlow::extract_all(&[diary]);
+    let fragments = FictionFlow::extract_all(&mut engine, &[diary]);
     assert_eq!(fragments.len(), 1);
 }
 
 #[test]
-fn scene_is_clipped_to_fifty_chars() {
+fn extract_falls_back_to_rules_without_llm() {
+    // 判断失败（LLM 不可用）→ 规则降级：取样取首句、片段母题 = 素材标题、场景截 50 字
     let diary = EmotionalDiary {
         title: "长文".to_string(),
         file: "a.md".into(),
-        // 超过 50 字的整句，取样原样带下来再截断
         content: format!("走看{}", "很多".repeat(30)),
     };
-    let fragment = FictionFlow::extract(&diary);
+    let mut engine = Engine::new(demo_llm());
+    let fragment = FictionFlow::extract(&mut engine, &diary);
+    assert_eq!(fragment.motif, "长文");
     assert_eq!(fragment.scene.chars().count(), 51); // 50 字 + 省略号
     assert!(fragment.scene.ends_with('…'));
 }
@@ -192,16 +205,25 @@ fn stage_completion_tracks_missing_numbers() {
 }
 
 #[test]
-fn packaging_extracts_title_tagline_and_theme() {
-    let packaging = extract_packaging("她把票塞进他手里。夜班地铁的灯忽明忽暗。");
+fn packaging_prefers_llm_then_falls_back_to_rules() {
+    // LLM 首选：按 packaging.yaml 填表
+    let engine = semantic_engine();
+    let packaging = extract_packaging(&engine, "她把票塞进他手里。夜班地铁的灯忽明忽暗。");
+    assert_eq!(packaging.title, "她把票塞进他手里");
+    assert_eq!(packaging.tagline, "夜班地铁的灯忽明忽暗");
+    assert_eq!(packaging.theme, "错过与递出");
+
+    // 规则降级：首句作标题、5-15 字句作简介、末句作立意
+    let fallback = Engine::new(demo_llm());
+    let packaging = extract_packaging(&fallback, "她把票塞进他手里。夜班地铁的灯忽明忽暗。");
     assert_eq!(packaging.title, "她把票塞进他手里");
     assert_eq!(packaging.tagline, "她把票塞进他手里"); // 8 字，落在 5..=15
     assert_eq!(packaging.theme, "夜班地铁的灯忽明忽暗");
 
     // 没有 5..=15 字的句子：简介留空
-    let packaging = extract_packaging("短。这一句特别特别特别特别特别特别长。");
+    let packaging = packaging_by_rules("短。这一句特别特别特别特别特别特别长。");
     assert_eq!(packaging.tagline, "");
 
     // 空正文：三样都空
-    assert_eq!(extract_packaging(""), Default::default());
+    assert_eq!(packaging_by_rules(""), Default::default());
 }

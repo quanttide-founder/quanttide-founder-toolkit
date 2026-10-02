@@ -21,7 +21,7 @@
 ### 内容总览
 
 - `docs/`：总述 + 用户指南（5 篇）+ 开发者指南（4 篇）+ API 参考（4 篇）
-- `packages/`：Dart 与 Rust 两个语言包，规则与工作流 YAML 共用 `packages/dart/assets/`
+- `packages/`：Dart 与 Rust 两个语言包，规则与工作流 YAML 共用 toolkit 根的 `tests/fixtures/`
 - `apps/`、`assets/`、`examples/`：子模块，不在本仓库记录版本
 
 ### 破坏性变更与迁移指南

@@ -1,0 +1,30 @@
+# 观察素材的判据与读法（fiction 三步提炼的取样、观察展开）
+# 情绪本身不是素材，情绪经过外化观察之后才是素材——不到 Observed 就不给 Settle
+
+name: observation
+document_type: observation
+
+criteria:
+  intent: 从情绪记录挑出可写素材，再把样本外化成观察
+  rules: |
+    取样：挑含具体细节（场景、动作、物件）的句子，抽象感受不作样本。
+    展开：输出场景、动作、细节之一，不输出情绪词的同义改写。
+  positive:
+    - 在地铁上看着拿手机的人
+  negative:
+    - 心里发闷，堵得慌（纯感受，没有可拍的东西）
+  ambiguous:
+    - 「我气得摔了杯子」——有动作可拍，观察成立；情绪保留在叙述层，不进入观察
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 外部观察——从样本展开的场景、动作、细节
+sections:
+  split_by: H2
+  extract:
+    - field: observation
+      from: 从样本展开的外部观察（场景/动作/细节）
+  unknown_content: 保留在 paragraphs 中，不丢弃

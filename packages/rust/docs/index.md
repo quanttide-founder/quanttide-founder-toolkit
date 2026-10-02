@@ -67,7 +67,7 @@ fiction 那侧有一个更精炼的表达：
 
 ### 规则外部化
 
-`Artifact` / `Workflow` 是 YAML，与 Dart 共享同一份资产（`packages/dart/assets/`，同一件事只写一处）。
+`Artifact` / `Workflow` 是 YAML，与 Dart 共享同一份资产（toolkit 根的 `tests/fixtures/`，同一件事只写一处）。
 
 设计意图是：规则是数据，不是代码。换一份 YAML，就换一种解读方式。这让 memory 和 fiction 能共用同一套解析引擎，只是配置不同。这是一个有远见的选择，但实现层面没人读那份 YAML。
 

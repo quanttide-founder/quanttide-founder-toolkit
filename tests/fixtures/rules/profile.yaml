@@ -1,0 +1,43 @@
+# profile 文档解析规则
+# 供 memory_engine 的 LLM 语义提取层使用
+# 说明「怎么读」与「什么时候归 profile」，不是代码——改写法只改这里
+
+name: profile
+document_type: profile
+
+criteria:
+  intent: 我是什么样的人——稳定特征
+  rules: |
+    判据：文本在说写作者的一贯特征（做法、偏好、反应模式），不是一次情绪、不是他人特征。
+    拿不准时输出 journal，不收即不错收。
+  positive:
+    - 我总是把截止日当起点
+    - 我习惯先拍板再补信息
+  negative:
+    - 今天我很烦躁（这是一次情绪）
+    - 他习惯迟到（这是他人特征）
+  ambiguous:
+    - 「我这次又拖延了」——说的是偶发事件则留 journal，指向一贯模式则归 profile
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 来源说明，描述这份档案从哪来、覆盖什么
+sections:
+  split_by: H2
+  subsections: H3
+  extract:
+    - field: name
+      from: H2 标题
+    - field: paragraphs
+      from: 节内段落文本，按顺序保留
+    - field: items
+      from: 节内列表条目
+      format: 每条提取 name 和 detail
+      patterns:
+        - "**名称**：详情"    # 加粗名称 + 冒号
+        - "名称：详情"         # 普通名称 + 冒号
+        - "纯文本"             # 无冒号时整句作 name，detail 为空
+  unknown_content: 保留在 paragraphs 中，不丢弃

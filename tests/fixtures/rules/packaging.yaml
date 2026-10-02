@@ -1,0 +1,36 @@
+# 包装文案的提取规则（晋江规范）
+# 三类文案各自承担不同信息，不互相重复：标题 = 核心矛盾与钩子；
+# 一句话简介 = 增量信息（≤15 字）；立意 = 价值维度
+
+name: packaging
+document_type: packaging
+
+criteria:
+  intent: 从正文提取标题、一句话简介、立意
+  rules: |
+    标题找有画面感或反转的句子，作核心矛盾与钩子；
+    一句话简介回答「凭什么看」，增量信息，不超过 15 字；
+    立意给价值维度，与文案结尾呼应。三样不互相重复。
+  positive:
+    - 标题「她把票塞进他手里」（动作即钩子）
+  negative:
+    - 把情节复述当简介（没有增量信息）
+  ambiguous:
+    - 正文里没有 15 字以内的句子——裁决为简介留空，不凑字
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 正文来源说明
+sections:
+  split_by: H2
+  extract:
+    - field: title
+      from: 标题——核心矛盾与钩子
+    - field: tagline
+      from: 一句话简介——增量信息，不超过 15 字
+    - field: theme
+      from: 立意——价值维度
+  unknown_content: 保留在 paragraphs 中，不丢弃

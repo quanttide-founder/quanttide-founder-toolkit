@@ -1,9 +1,0 @@
-name: cluster
-description: 聚类——同一认识跨日期合并
-input: journal
-output: [insight]
-steps:
-  - judge: 判断本质是否相同
-  - merge: 合并为一条
-rules: |
-  同一认识跨日期合并为一条，判断依据是本质相同而非措辞相似。

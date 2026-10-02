@@ -1,0 +1,32 @@
+# 创作片段的提取规则（fiction 三步提炼的落实片段）
+# 母题卡片一句话说清写什么；场景素材是 50 字钩子
+
+name: fragment
+document_type: fragment
+
+criteria:
+  intent: 从观察提炼母题卡片与场景素材
+  rules: |
+    母题从观察提炼出可复用的写作意图；场景保留画面，50 字内讲完。
+    观察很长时截断加省略号，母题不随观察长度变化。
+  positive:
+    - 观察「她把票塞进他手里」→ 母题「错过与递出」
+  negative:
+    - 把情绪词改写成金句（那是感受，不是画面）
+  ambiguous:
+    - 观察超长——裁决为场景截断加省略号，母题照常提炼
+
+title:
+  source: first_h1
+  fallback: filename
+description:
+  location: preface
+  meaning: 观察原文
+sections:
+  split_by: H2
+  extract:
+    - field: motif
+      from: 母题卡片——一句话说清写什么
+    - field: scene
+      from: 场景素材——50 字钩子
+  unknown_content: 保留在 paragraphs 中，不丢弃

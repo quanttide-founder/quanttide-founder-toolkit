@@ -4,9 +4,15 @@
 //! cargo run --example fiction_workflow                # 默认定位主仓库 assets/fiction
 //! cargo run --example fiction_workflow -- <路径>
 //! ```
+//!
+//! 三步提炼与包装文案走 LLM（配置读 quanttide-agent 的环境变量）；
+//! 未配置 key 时用演示客户端，判断走显式降级——取样取首句、片段与包装按规则补。
 
 use std::path::PathBuf;
 
+use quanttide_agent::LLMError;
+use quanttide_agent::llm::{HttpClient, LLM};
+use quanttide_founder::core::engine::Engine;
 use quanttide_founder::fiction::states::{
     Event, FictionState, assign_number, check_stage, extract_packaging, find_gaps, stage_flow,
 };
@@ -19,6 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => default_root(),
     };
     let repo = FictionRepository::load(&root)?;
+    let mut engine = demo_engine();
 
     println!("fiction 工作流演示");
     println!("根目录：{}", root.display());
@@ -28,9 +35,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("═══ 三步提炼（观察站 → 创作片段）═══");
     for diary in &repo.observation.emotional_diaries {
         let mut machine = FictionFlow.state_machine();
-        machine.handle(&Event::Sample(diary.clone()));
-        machine.handle(&Event::Expand);
-        machine.handle(&Event::Settle);
+        machine.handle_with_context(&Event::Sample(diary.clone()), &mut engine);
+        machine.handle_with_context(&Event::Expand, &mut engine);
+        machine.handle_with_context(&Event::Settle, &mut engine);
         let fragment = match machine.state() {
             FictionState::Fragmented { fragment } => fragment,
             other => panic!("三步走完应有片段，实际 {other:?}"),
@@ -83,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if (stage.name.contains("定稿") || stage.name.contains("成稿"))
                 && let Some(chapter) = stage.chapters.first()
             {
-                let packaging = extract_packaging(&chapter.content);
+                let packaging = extract_packaging(&engine, &chapter.content);
                 println!("  包装文案（{}）：", chapter.title);
                 println!("    标题：{}", packaging.title);
                 println!("    简介：{}", packaging.tagline);
@@ -94,6 +101,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
     Ok(())
+}
+
+/// 有 API key 才真调 LLM；未配置就用演示客户端，判断走显式降级（示例离线可跑）。
+fn demo_engine() -> Engine {
+    let configured = std::env::var("LLM_API_KEY")
+        .or_else(|_| std::env::var("DEEPSEEK_API_KEY"))
+        .is_ok();
+    if configured {
+        return Engine::new(LLM::default());
+    }
+    println!("（未配置 LLM_API_KEY——判断走规则降级）");
+    Engine::new(LLM::with_client(
+        "demo",
+        "http://localhost",
+        "",
+        Box::new(OfflineLlm),
+    ))
+}
+
+/// 演示客户端：不发请求，回的文本解析不出填表结果，降级路径因此触发。
+struct OfflineLlm;
+
+impl HttpClient for OfflineLlm {
+    fn post_json(
+        &self,
+        _url: &str,
+        _auth: &str,
+        _body: &serde_json::Value,
+    ) -> Result<serde_json::Value, LLMError> {
+        Ok(serde_json::json!({
+            "model": "demo",
+            "choices": [{
+                "message": { "role": "assistant", "content": "（演示模式，未调用 LLM）" },
+                "finish_reason": "stop"
+            }]
+        }))
+    }
 }
 
 /// 依次尝试：主仓库 assets/fiction、当前目录，返回首个存在的候选。
