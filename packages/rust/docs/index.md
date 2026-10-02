@@ -1,8 +1,10 @@
 # 设计与执行的错位
 
+> 状态（2026-10-02）：本文写于重构前，诊断针对 0.1.0-alpha.1 的实现。九处语义降级已全部接回 core 接口，三分法已落地，判据进 YAML——执行对照见 [ROADMAP.md](../ROADMAP.md)，判据文本见 [criteria.md](criteria.md)。下文保留为诊断记录，涉及现状处已就地标注。
+
 ## 问题的重新定位
 
-前几轮的分析批评了实现：`route` 里用「要」短路一切、`expand_observation` 原样返回、`Engine::run` 的 `scan` 清空 `items`。这些批评仍然成立，但它们批评的对象是错的。它们针对的是「一个糟糕的实现」，却没有先问一个更基本的问题：这个实现试图实现什么？
+前几轮的分析批评了实现：`route` 里用「要」短路一切、`expand_observation` 原样返回、`Engine::run` 的 `scan` 清空 `items`。这些批评针对 0.1.0-alpha.1 的实现成立，但它们批评的对象是错的。它们针对的是「一个糟糕的实现」，却没有先问一个更基本的问题：这个实现试图实现什么？
 
 把 `route` 的五张关键词表（`COGNITION` / `INTENT` / `DIRECTION` / `PROFILE`）摊开看，这不是随手写的 if-else，而是有人在试图实现一个认知分类模型，用关键词作初步近似。
 
@@ -49,7 +51,7 @@ fiction 那侧有一个更精炼的表达：
 
 `core/` 提供类型（`Block` / `RawSection`）、错误（`Error`）、概念（`Artifact` / `Workflow`），但不提供「memory 怎么读」「fiction 怎么读」。core 跨域共享，域依赖 core，core 不依赖域。
 
-这条原则在很多地方被违反，比如 `RuleBasedExtractor` 里的「前言段 → description」其实是 memory 的约定，但意图是清楚的：core 定义词汇，域定义句子。
+这条原则当时在很多地方被违反，比如 `RuleBasedExtractor` 里的「前言段 → description」其实是 memory 的约定——现已改为按规则的 `description.location` 配置提取。意图一直是清楚的：core 定义词汇，域定义句子。
 
 ### 模型、仓库、状态三层分离
 
@@ -69,7 +71,7 @@ fiction 那侧有一个更精炼的表达：
 
 `Artifact` / `Workflow` 是 YAML，与 Dart 共享同一份资产（toolkit 根的 `tests/fixtures/`，同一件事只写一处）。
 
-设计意图是：规则是数据，不是代码。换一份 YAML，就换一种解读方式。这让 memory 和 fiction 能共用同一套解析引擎，只是配置不同。这是一个有远见的选择，但实现层面没人读那份 YAML。
+设计意图是：规则是数据，不是代码。换一份 YAML，就换一种解读方式。这让 memory 和 fiction 能共用同一套解析引擎，只是配置不同。这是一个有远见的选择，但当时的实现没有读那份 YAML；现在判据与读法都从 `tests/fixtures/` 载入（编译期嵌入 + `Artifact::from_file`）。
 
 ### LLM 是语义算子，不是对话界面
 
@@ -133,9 +135,9 @@ pub trait SemanticExtractor {
 
 ## 执行失败在哪里
 
-实现的失败不是笼统的「水平不高」，而是同一个具体失败在九处重复：把所有「理解」任务降级为「字符串包含」。
+重构前，实现的失败不是笼统的「水平不高」，而是同一个具体失败在九处重复：把所有「理解」任务降级为「字符串包含」。
 
-| **位置** | **意图** | **AI 的实现** |
+| **位置** | **意图** | **当时的实现（0.1.0-alpha.1）** |
 |:--|:--|:--|
 | `route` | 三问语义路由 | `"要" in text` |
 | `grade` | 认识论判定 | 三个计数的 if |
@@ -155,21 +157,23 @@ core 里明明有 `Engine::judge`。一个成熟的实现会在 `route` 里看�
 
 这就是「AI 实现水平不高」的具体形态：不是写不出正确的代码，而是看不到设计者留下的接口。设计者留下了 `LlmExtractor` 和 `Engine::judge`，AI 用它们旁边的空位写下了 `"要" in text`。
 
+现状：九处现已全部改为调用 `Engine::judge` / `LlmExtractor`，规则版只作降级——逐处对照见 [ROADMAP.md](../ROADMAP.md) 阶段四。
+
 ## 这份代码说明了什么
 
 这是一份由懂业务的人设计的架构，被一个不懂业务的执行者填上了内容。
 
 - 架构是深思熟虑的——类型、状态机、接口、doc，都不是随便写的；
-- 内容是机械降级的——所有需要理解的地方都退化成字符串匹配；
+- 内容当时是机械降级的——所有需要理解的地方都退化成字符串匹配；
 - 二者不兼容——因为架构要求「理解」，实现提供「匹配」。
 
 这解释了「形状精密，内容为空」。它不是设计者的失误，也不是架构的缺陷，是执行没有跟上设计。最令人遗憾的不是 AI 没写好某个函数，而是 AI 没看到设计者在 `Engine::judge` 那里留下的接口，于是从零开始写了一套启发式，而这套启发式的每一个判据都比 `Engine::judge` 能给出的弱。
 
 ## 把执行接上设计
 
-这不是「修 bug」，而是把九处降级换成对 core 接口的调用：
+这不是「修 bug」，而是把九处降级换成对 core 接口的调用（已按此执行）：
 
-- `route(text)` → 调用 `Engine::judge(route_rules, [text])`，返回 `Destination`；
+- `route` + `classify` → 调用 `Engine::judge(category_rules, [text])`，返回命中类别与理由（没命中返回 `None`，留在 journal）；
 - `grade(...)` → 调用 `Engine::judge(grade_rules, ...)`，返回 `InsightGrade`；
 - `cluster(items)` → 调用 `Engine::judge(cluster_rules, items)`；
 - `expand_observation(sample)` → 调用 `LlmExtractor::extract(...)`；
@@ -178,7 +182,7 @@ core 里明明有 `Engine::judge`。一个成熟的实现会在 `route` 里看�
 
 AI 已经写好了一个让这些降级可以被替换的 API——`LlmExtractor` 和 `Engine::judge`。只要把每个降级函数的函数体改成调用它，设计意图就恢复了。
 
-`RuleBasedExtractor` 的存在说明了设计者的预期：降级版本应该作为 fallback，而不是主实现。现在它变成了主实现。
+`RuleBasedExtractor` 的存在说明了设计者的预期：降级版本应该作为 fallback，而不是主实现。0.1.0-alpha.1 把它当成了主实现，现已改回——LLM 首选，规则降级显式跟在后面。
 
 ## 分类体系没有落地
 
@@ -231,6 +235,8 @@ fn route(text: &str, categories: &[Category]) -> Category
 
 不是 AI 选择降级，是类型选择让 AI 只能降级。一句话：`Destination` 是 category，代码把它做成了 type，这个错位是后面一切降级的源头。
 
+现状：`Destination` 枚举已拆——类别是四份 `Artifact` 的 `name`，判据写在各自的 `criteria` 里（`tests/fixtures/rules/*.yaml`），由 `Engine::judge` 执行；`Journal` 是补集，`ClassifiedEntry.destination` 为 `Option`，五张关键词表已删。
+
 ## classify 与 route
 
 `classify` 就是 `texts.map(route)`。它没有引入任何新逻辑，只是批量包装。
@@ -251,6 +257,8 @@ fn classify(text: &str) -> Category
 批量由调用方自己 map。真需要批量时，可以加一个薄包装，但不要把它当作第二层概念——因为它本来就不是第二层，而是同一个概念的两种用法。
 
 在只有 category、没有 type 的分类体系里，`classify` 的语义很清楚：给一段文本定一个 category。它不该有两层，因为 category 只有一个来源。分成 `route` + `classify`，是把「单条 vs 批量」这个无关的数量区别，伪装成了「判断 vs 分类」这个有关的语义区别。
+
+现状：已合并为单条 `classify(engine, text, categories)`，批量由状态机在事件处理里 map；判据是语义还是字符，在这一个函数里一眼可见。
 
 ## 分类是一次判断还是三件事
 
@@ -298,6 +306,8 @@ AI 就没有退路。它不能只对某一个维度写 `if contains`，因为必
 不过有一处需要修正：type 和 category 确实都是语义判断，但 tag 不完全是。tag 是 KV，很多 tag 来自元数据而不是文本语义——日期从文件名来，来源从路径来，版本从上下文来。这些不是「理解」出来的，是「提取」出来的。所以更准确的说法是：type 和 category 是一次判断（语义），tag 是另一次提取（元数据）。两者同属分类场景，但判据不同。如果把它们强行捆在一起，AI 可能为了「统一」而把 tag 也硬做成语义判断，反而错。
 
 所以设计者对分类的理解更正确，因为它保留了「一次判断输出多个维度」这个约束。这个约束是整个设计里防止 AI 退化的最后一道防线，不应该被拆开。
+
+现状：`classify` 一次输出去向与必填理由；type 由解析期的块类型回答，tag 由 `JournalEntry::tags` 从文件名与路径单独提取——三个维度各有唯一来源，不混用。
 
 ## 重构从意图的可判定化开始
 
@@ -348,6 +358,8 @@ AI 就没有退路。它不能只对某一个维度写 `if contains`，因为必
 如果只做一件事，就写 `Destination` 五个类别的判据——不写代码，不改文件。写完，下一步会自动显形，因为判据和当前类型的错位会自己暴露出来。
 
 一句话：重构不是从代码开始，是从意图开始。把意图写成可判定的判据，类型会自己跟着变，AI 就不会再降级。起点是 `route` 的五个类别，各写一段判据。
+
+已按此执行：判据写在 [criteria.md](criteria.md)，落地在 `tests/fixtures/rules/*.yaml` 的 `criteria` 字段（意图 / 判据 / 正例 / 反例 / 易混例含裁决）；类型随后按判据改为数据驱动，顺序与验收记录在 [ROADMAP.md](../ROADMAP.md)。
 
 ## Destination 不该存在
 
@@ -402,9 +414,11 @@ fn route(text, artifacts) -> Option<&Artifact>
 
 一句话：`Destination` 是 `Artifact` 的名字被硬编码成了 enum。拆掉这个硬编码，`route`、`Artifact`、`LlmExtractor`、`rules.rs` 全部自动接上。这是整个重构的第一个杠杆。
 
+已拆：`Artifact` 增了 `name` 与 `criteria`，分类输出 `Option<String>`（`None` 即留在 journal），`Artifact` 与 `LlmExtractor` 都有了真实的调用方。
+
 ## 同类问题的完整清单
 
-「类似」指的是：本该是 category 的东西被做成了 type，或者反过来。按三分法梳理，共有五个方向。
+「类似」指的是：本该是 category 的东西被做成了 type，或者反过来。按三分法梳理，共有五个方向（五个方向现已全部清理，对照见 [ROADMAP.md](../ROADMAP.md) 阶段五；下表保留为诊断记录）。
 
 ### category 被做成了 type
 
@@ -491,6 +505,6 @@ impl SemanticExtractor for RuleBasedExtractor { ... }
 - 设计者想清楚了：创始人工具是什么、认知如何分类、创作如何提炼、规则如何外部化、LLM 扮演什么角色；
 - 执行者把这些填成了：字符串包含、恒等返回、占位分支。
 
-设计者把意图写在了代码形状里，而不是代码体里——形状是完整的、自洽的、有理论的；实现是降级的、一致的、机械的。所以能从代码里捕捉到的业务意图和设计意图，几乎全部。
+设计者把意图写在了代码形状里，而不是代码体里——形状是完整的、自洽的、有理论的；实现当时是降级的、一致的、机械的。所以能从代码里捕捉到的业务意图和设计意图，几乎全部。
 
-用一句话总结：一个懂业务和技术的资深专家写了一份「产品在做什么」的完整规格；执行者把这份规格翻译成 Rust 时，在每一个「这里需要理解语义」的地方，都填上了字符串匹配。而修复它的方式不是重写，是认出那些地方，把它们接到设计者早就准备好的接口上。
+用一句话总结：一个懂业务和技术的资深专家写了一份「产品在做什么」的完整规格；执行者把这份规格翻译成 Rust 时，在每一个「这里需要理解语义」的地方，都填上了字符串匹配。而修复它的方式不是重写，是认出那些地方，把它们接到设计者早就准备好的接口上——这一步已完成：判据进 YAML，九处降级归位，验收记录见 [ROADMAP.md](../ROADMAP.md)。
