@@ -764,3 +764,136 @@ Destination 是 Artifact 的名字被硬编码成了 enum。
 拆掉这个硬编码，route、Artifact、LlmExtractor、rules.rs 全部自动接上。
 
 你指出的这一步，是整个重构的第一个杠杆。
+
+同类问题的完整清单
+
+「类似」= 本该是 category 的东西，被做成了 type——或者反过来。
+
+按你的三分法梳理。
+
+—
+
+方向一：category 被做成了 type
+
+同 Destination 的错位。
+
+东西 它本该是 被做成了
+Destination Artifact 的 key enum
+InsightGrade insight 的分级类别 enum
+MergeAction 合并策略类别 enum
+Verb（scan/judge/merge） workflow 定义的动词 Step.verb: String
+
+共同后果：
+
+· 判据没地方来 → 硬编码
+· 加一类要改代码、重编译
+· LLM 接不进来
+· AI 只能用字符串匹配顶
+
+InsightGrade 尤其明显——它被写在 build_section 里：
+
+```rust
+if raw.title.contains(”已确认“) { Confirmed }
+else if raw.title.contains(”假说“) { Hypothesis }
+```
+
+「已确认」「假说」是 category 的名字，硬编码在代码里。
+
+—
+
+方向二：type 被做成了 String
+
+反方向——本该固定取值的东西，被写成任意字符串。
+
+东西 它本该是 被做成了
+split_by H1..H6 String
+title.source 几个固定来源 String
+description.location 几个固定位置 String
+Step.verb Scan/Judge/Merge String
+
+共同后果：
+
+· 编译期不校验 → split_by: ”h7“ 也能加载
+· 运行期才可能报错（UnknownVerb）
+· 或者根本不报错（split_by 没人读）
+
+—
+
+方向三：category 被做成了计数
+
+should_promote_to_profile 的错位。
+
+```rust
+fn should_promote_to_profile(item, application_count: usize) -> bool {
+    application_count >= 3
+}
+```
+
+意图：「命题反复套用、稳定为思维框架」。
+
+「稳定为思维框架」是 category 判断——这个命题的性质是什么。
+
+但签名给了 usize——把 category 问题伪装成了计数问题。
+
+同一错位：grade 的 occurrence_count >= 2。
+
+—
+
+方向四：category 被做成了关键词表
+
+最隐蔽的一种。
+
+```rust
+const INTENT_KEYWORDS: [&str; 12] = [”要“, ”不要“, ...];
+```
+
+关键词表是 category 的降级形式——用一组词近似一个语义类别。
+
+它看起来像「分类配置」，实际是硬编码判据。
+
+同一错位：has_concrete_detail 里的 13 个动词。
+
+—
+
+方向五：主次关系被抹平
+
+SemanticExtractor trait。
+
+```rust
+impl SemanticExtractor for LlmExtractor { ... }
+impl SemanticExtractor for RuleBasedExtractor { ... }
+```
+
+意图：LLM 首选，规则降级。
+
+trait 让它们平级——主次关系消失。
+
+同一错位：Option<String> 让「缺失」看起来正常，reason: None 永远不填。
+
+—
+
+根源：你的三分法没有落到代码里
+
+你心里有：type / category / tag。
+
+代码里：所有东西都变成了 enum 或 String。
+
+· 该是 category 的 → 成了 enum 或 String
+· 该是 type 的 → 成了 String
+· 该是 tag 的 → 没有对应结构
+
+三个概念，在代码里只活下来一个半（enum / String）。
+
+—
+
+一句话
+
+同一个错位，五个方向：
+
+1. category → type（Destination / InsightGrade / MergeAction）
+2. type → String（split_by / verb）
+3. category → 计数（should_promote）
+4. category → 关键词表（INTENT_KEYWORDS）
+5. 主次 → 平级（SemanticExtractor / Option）
+
+全部是「三分类没落地」的同一个病的不同症状。
