@@ -155,3 +155,131 @@ memory/
 让结构成为数据——不是「配置」，是「被管理的内容」——它才能像资产一样增删改。
 
 这是整个项目的同一个模式的下一层：让元层可见。
+
+---
+
+这个映射很清晰
+
+对象存储的两个层级：
+
+· Bucket——顶层容器，隔离和策略的单位
+· Object——bucket 内的单个项，有 key 和 value
+
+映射到你的系统：
+
+· Bucket = 资产（memory / fiction / work）
+· Object = 内容单元（一篇日志、一份洞察、一个章节）
+
+两个层级，没有第三个。 这就是基本单元。
+
+—
+
+层（journal / profile / insight / roadmap）是什么
+
+按这个映射，层不是第三个层级——它是 object 的 key 前缀。
+
+```
+bucket: memory
+├── object: journal/2024-01-01.md
+├── object: profile/我是谁.md
+├── object: insight/认知.md
+└── object: roadmap/方向.md
+```
+
+对象存储里没有「目录」这个东西——S3 里 journal/2024-01-01.md 只是一个 key 里带斜杠的对象。目录是从 key 前缀「涌现」出来的视图。
+
+你的层也一样——journal / profile / insight / roadmap 不是结构层级，是key 的组织方式。
+
+代码不需要「知道 memory 有四个层」。 它只需要：
+
+· 读 bucket 下的所有 object
+· 按 key 前缀分组
+· 每个前缀的 object 用对应的 Artifact 处理
+
+加一层 = 加一批 key 前缀。 不用改代码，不用改结构——就像 S3 里加「目录」只是加了一批新 key。
+
+—
+
+这个映射带来的几个精确结论
+
+结论一：Asset = Bucket 的配置。
+
+一个 bucket 有：
+
+· 名字
+· 策略（接受什么 object、拒绝什么）
+· 关联的 Artifact（每种 key 前缀用什么规则读）
+· 生命周期（什么时候归档、什么时候删除）
+
+这就是你说的「资产文件」。 它描述一个 bucket。
+
+结论二：Object 是纯粹的 key + value。
+
+Object 不知道自己的语义——它的 key 和它所属的 bucket 决定了怎么处理它。
+
+这和现在的代码相反。 现在 JournalEntry、InsightDoc 各自是一种类型，各自知道自己的语义。在对象存储模型里，它们都是 object——区别只在 key 的前缀。
+
+结论三：检索 = 按 key 前缀枚举。
+
+现在的 read_journals / layer_files——它们在做的事是「读某个前缀下的所有 object」。
+
+对象存储的 API 就是「list by prefix」。 没有「journal 层」这个概念——只有 list(”journal/“)。
+
+结论四：跨 bucket 的操作
+
+对象存储里 bucket 之间不能直接操作。这在你的语义里正好对应——memory 和 fiction 是独立的，它们之间不流动资产。
+
+但它们有隐含的语义关联——这个关联不是 bucket 之间的数据流，是两个 bucket 的配置之间的引用。
+
+```yaml
+# assets/memory.yaml
+name: memory
+key_prefixes:
+  - default/
+  - fiction/
+
+# assets/fiction.yaml  
+name: fiction
+key_prefixes:
+  - novel/
+  - chapter/
+related:
+  - bucket: memory
+    prefix: fiction/
+    type: meta    # 元认知
+```
+
+关联是 bucket 配置的一部分，不是 bucket 内容的一部分。 这解决了你前面说的「关联捕捉不到」——它不是数据流，它是配置的引用。
+
+—
+
+这个建模最大的好处
+
+它终结了「结构写死」的问题。
+
+· 加一个 bucket（新域）：加一个 .yaml
+· 加一个层（新 key 前缀）：加一批 object，改一次 bucket 配置
+· 改一个层的处理方式：改 Artifact 关联
+· 删一个域：删 .yaml
+
+代码只做三件事：
+
+1. 读 assets/ 下的所有 bucket 配置
+2. 对每个 bucket，按 key 前缀枚举 object
+3. 按前缀对应的 Artifact 处理
+
+没有「memory 模块」，没有「fiction 模块」——只有 bucket 和 object。
+
+这才是真正的「域成为资产」。 域不是代码里的模块，是数据里的 bucket。
+
+—
+
+一句话
+
+Bucket = 资产（memory / fiction / work），Object = 内容单元。
+
+层不是第三级——它是 key 前缀，从对象里涌现的视图。
+
+代码只做「list by prefix」，不预设任何 bucket 或前缀。
+
+这才是你要的建模——两个层级，基本单元。
