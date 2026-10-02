@@ -1,6 +1,6 @@
 [package]
 name = "quanttide-founder"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2024"
 description = "量潮创始人工具箱（quanttide-founder-toolkit）的 Rust 包，面向创始人角色的事务与工具集合。"
 license = "Apache-2.0"

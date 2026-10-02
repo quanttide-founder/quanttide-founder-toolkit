@@ -13,7 +13,7 @@
 
 ```toml
 [dependencies]
-quanttide-founder = "0.1.0-alpha.1"
+quanttide-founder = "0.1.0-alpha.2"
 ```
 
 ## 模块

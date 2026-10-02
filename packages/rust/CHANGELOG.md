@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.0-alpha.2] - 2026-10-02
 
 把执行接上设计：九处语义降级（字符串匹配、恒等返回、占位分支）换成对 core 接口的调用，判据从代码搬进 YAML。详见 [ROADMAP.md](ROADMAP.md) 与 [docs/criteria.md](docs/criteria.md)。
 
