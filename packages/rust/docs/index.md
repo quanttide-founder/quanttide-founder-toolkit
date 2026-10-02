@@ -254,3 +254,89 @@ AI 已经写好了一个完美的 API 让这些降级可以被替换——LlmExt
 一个懂业务和技术的资深专家写了一份「产品在做什么」的完整规格；执行者把这份规格翻译成 Rust 时，在每一个「这里需要理解语义」的地方，都填上了字符串匹配。
 
 而修复它的方式，不是重写，是认出那些地方，把它们接到设计者早就准备好的接口上。
+
+对，这就说清了
+
+你的三分法：
+
+ 是什么 谁定 例子
+type 系统预置 代码 BlockType::{Heading, Bullet, ...}
+category 业务类别 业务 Insight / Profile / Roadmap / ...
+tag KV 标签 数据 source: ”2024-03-15“
+
+按这个框架看——Destination 是 category，不是 type。
+
+它由业务定义，会随业务变——今天是五个去向，明天可能加一个。它不该是编译期固定的 enum。
+
+—
+
+但代码把它写成了 type
+
+```rust
+pub enum Destination {
+    Insight, Profile, Roadmap, Intention, Journal,
+}
+```
+
+这是 type 的做法——编译期穷举、不可扩展、改了要重编。
+
+当 category 用 type 来实现，会发生什么：
+
+1. 它逼你写死判据。 route 必须把「哪些话属于 Insight」翻译成代码——所以才有 COGNITION_KEYWORDS 这类东西。如果它是 category，判据应该来自配置（Artifact YAML），不是硬编码。
+2. 它让 LLM 用不上。 category 本该是数据——LLM 读规则、给分类。type 是编译期概念，LLM 进不来。
+3. AI 只能退化。 它看到 enum，看到 fn route(text) -> Destination——它没有别的选择，只能写 if text.contains(...)。因为 enum 就是「你要用代码判」的信号。
+
+这不是 AI 笨。是类型选错了，把 AI 引导到了错误的方向。
+
+—
+
+如果你当初写成 category
+
+一个 category 系统会长什么样（示意）：
+
+```rust
+pub struct Category {
+    pub name: String,           // ”insight“
+    pub description: String,    // ”想通了什么“
+    pub rules: String,          // 判据，自然语言
+}
+```
+
+route 变成：
+
+```rust
+fn route(text: &str, categories: &[Category]) -> Category
+```
+
+判据从哪来？ 从 Artifact YAML。
+
+谁执行判据？ LLM（Engine::judge）。
+
+AI 看到这个签名会怎么写？ 它没有硬编码的余地——它必须去读 categories，必须调用判据。
+
+这一下就把 AI 引导对了。
+
+—
+
+所以问题的根，可能比我想的更深
+
+我前面说 AI 把「理解」降级成了「字符串匹配」。
+
+但也许该说是：类型系统（enum）逼 AI 走了降级路。
+
+· enum Destination 隐含「判据是代码」
+· 代码判据必须确定性
+· 确定性判据只能是字符串匹配
+· 字符串匹配必然捕捉不到语义
+
+链条是这样的。 不是 AI 选择降级，是类型选择让 AI 只能降级。
+
+—
+
+一句话
+
+Destination 是 category，代码把它做成了 type。
+
+这个错位是后面一切降级的源头。
+
+
