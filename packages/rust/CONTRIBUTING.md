@@ -42,6 +42,7 @@ cargo run --example agent_subscribe     # 状态流推给上层
 - **域编排**不用手写流转，用 [statig](https://crates.io/crates/statig) 状态机——事件进、状态出，走到哪一步一目了然；判断器作为上下文随事件进场
 
 本包自身的两条约定：
+
 - 规则与工作流 YAML 只在 toolkit 根 `tests/fixtures/`，本包编译期嵌入（`src/{memory,fiction}/rules.rs`），另一侧引用，不复制；
 - 与 Dart 的行为改动同批完成、测试同批补；结构性差异登记在 [CHANGELOG.md](CHANGELOG.md) 的「与 Dart 包的差异」，不口头约定。
 
